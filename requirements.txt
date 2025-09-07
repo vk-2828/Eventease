@@ -1,0 +1,20 @@
+# fastapi
+# uvicorn[standard]
+# motor
+# pydantic
+# python-dotenv
+# passlib[bcrypt]
+# python-jose[cryptography]
+
+fastapi
+uvicorn[standard]
+motor
+pydantic[email]
+python-dotenv
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart
+pandas   # optional, for CSV/Excel export
+openpyxl
+google-generativeai
+# email-validater
