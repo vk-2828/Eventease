@@ -1,7 +1,22 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from routes import users, events, registrations, auth_routes, ai_agent
 
 app = FastAPI()
+
+origins = [
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",  # your Vite/React dev server
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,  # or ["*"] for all origins (not recommended for production)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 @app.get("/")
 def root():
     return {"message": "Welcome to EventEase API 🚀"}

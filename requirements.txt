@@ -17,4 +17,6 @@ python-multipart
 pandas   # optional, for CSV/Excel export
 openpyxl
 google-generativeai
-# email-validater
+# email-validater 
+fastapi[all]
+
