@@ -1,128 +1,6 @@
-# from fastapi import APIRouter, Depends, HTTPException
-# from database import db
-# from bson import ObjectId
-# from models.helpers import registration_helper
-# from schemas.registration import RegistrationCreate, RegistrationOut
-# from fastapi.security import OAuth2PasswordBearer
-# from jose import jwt, JWTError
-# from config import JWT_SECRET, JWT_ALGORITHM
-# from typing import List
-# from datetime import datetime
+# # routes/registrations.py
 
-# router = APIRouter()
-# oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/signin")
-
-# # -------------------
-# # Decode token (handle roles as list)
-# # -------------------
-# async def get_user_info(token: str = Depends(oauth2_scheme)):
-#     try:
-#         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-#         return {
-#             "id": payload.get("sub"),
-#             "roles": payload.get("roles", [])  # roles is a list
-#         }
-#     except JWTError:
-#         raise HTTPException(status_code=401, detail="Invalid token")
-
-# # -------------------
-# # Register for an event
-# # -------------------
-# @router.post("/", response_model=RegistrationOut)
-# async def register_event(registration: RegistrationCreate, user=Depends(get_user_info)):
-#     if "participant" not in user["roles"]:
-#         raise HTTPException(status_code=403, detail="Only participants can register")
-
-#     # prevent duplicate registrations
-#     existing = await db.registrations.find_one({
-#         "user_id": user["id"],
-#         "event_id": registration.event_id
-#     })
-#     if existing:
-#         raise HTTPException(status_code=400, detail="Already registered for this event")
-
-#     registration_dict = registration.dict()
-#     registration_dict.update({
-#         "user_id": user["id"],
-#         "created_at": datetime.utcnow()
-#     })
-
-#     result = await db.registrations.insert_one(registration_dict)
-#     return registration_helper(await db.registrations.find_one({"_id": result.inserted_id}))
-
-# # -------------------
-# # Get my registrations (with event details)
-# # -------------------
-# # @router.get("/me", response_model=List[dict])
-# # async def my_registrations(user=Depends(get_user_info)):
-# #     if "participant" not in user["roles"]:
-# #         raise HTTPException(status_code=403, detail="Only participants can view their registrations")
-
-# #     pipeline = [
-# #         {"$match": {"user_id": user["id"]}},
-# #         {"$lookup": {
-# #             "from": "events",
-# #             "localField": "event_id",
-# #             "foreignField": "_id",
-# #             "as": "event"
-# #         }},
-# #         {"$unwind": "$event"},
-# #         {"$replaceRoot": {"newRoot": "$event"}}  # returns the event object directly
-# #     ]
-
-# #     events = await db.registrations.aggregate(pipeline).to_list(length=None)
-# #     return events
-
-
-
-
-# @router.get("/me", response_model=List[dict])
-# async def my_registrations(user=Depends(get_user_info)):
-#     if "participant" not in user["roles"]:
-#         raise HTTPException(status_code=403, detail="Only participants can view their registrations")
-
-#     pipeline = [
-#         {"$match": {"user_id": user["id"]}},
-#         {"$lookup": {
-#             "from": "events",
-#             "localField": "event_id",
-#             "foreignField": "_id",
-#             "as": "event"
-#         }},
-#         {"$unwind": "$event"},  # flatten event array
-#         {"$project": {
-#             "_id": 0,
-#             "registration_id": {"$toString": "$_id"},
-#             "event_id": {"$toString": "$event._id"},
-#             "name": 1,
-#             "email": 1,
-#             "college": 1,
-#             "phone": 1,
-#             "created_at": 1,
-#             "event": 1
-#         }}
-#     ]
-
-#     results = await db.registrations.aggregate(pipeline).to_list(length=None)
-#     return results
-
-
-
-# # @router.get("/me", response_model=List[dict])
-# # async def my_registrations(user=Depends(get_user_info)):
-# #     if "participant" not in user["roles"]:
-# #         raise HTTPException(status_code=403, detail="Only participants can view")
-
-# #     regs = await db.registrations.find({"user_id": user["id"]}).to_list(length=None)
-# #     event_ids = [ObjectId(r["event_id"]) for r in regs if "event_id" in r]
-
-# #     events = await db.events.find({"_id": {"$in": event_ids}}).to_list(length=None)
-# #     print(events)
-# #     return events
-
-
-
-# from fastapi import APIRouter, Depends, HTTPException
+# from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks # NEW: Import BackgroundTasks
 # from database import db
 # from bson import ObjectId
 # from schemas.registration import RegistrationCreate, RegistrationOut
@@ -131,33 +9,29 @@
 # from config import JWT_SECRET, JWT_ALGORITHM
 # from typing import List
 # from datetime import datetime
+# from utils.email_sender import send_registration_email # NEW: Import the email function
 
 # router = APIRouter()
 # oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/signin")
 
+# # Your get_user_info and registration_helper functions remain the same...
 
-# # -------------------
-# # Decode token (roles as list)
-# # -------------------
-# async def get_user_info(token: str = Depends(oauth2_scheme)):
+# def get_user_info(token: str = Depends(oauth2_scheme)):
 #     try:
 #         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-#         return {
-#             "id": payload.get("sub"),
-#             "roles": payload.get("roles", [])  # roles is a list
-#         }
+#         email: str = payload.get("email")
+#         roles: list = payload.get("roles", [])
+#         if email is None:
+#             raise HTTPException(status_code=401, detail="Token missing email")
+#         return {"id": payload.get("sub"), "email": email, "roles": roles}
 #     except JWTError:
 #         raise HTTPException(status_code=401, detail="Invalid token")
 
-
-# # -------------------
-# # Helper to serialize ObjectId
-# # -------------------
 # def registration_helper(registration) -> dict:
 #     return {
 #         "id": str(registration["_id"]),
 #         "event_id": str(registration["event_id"]),
-#         "user_id": registration["user_id"],
+#         "user_id": str(registration["user_id"]),
 #         "name": registration["name"],
 #         "email": registration["email"],
 #         "college": registration.get("college", ""),
@@ -165,14 +39,19 @@
 #         "created_at": registration["created_at"].isoformat()
 #     }
 
-
 # # -------------------
 # # Register for an event
 # # -------------------
 # @router.post("/", response_model=RegistrationOut)
-# async def register_event(registration: RegistrationCreate, user=Depends(get_user_info)):
+# # NEW: Add background_tasks to the function signature
+# async def register_event(registration: RegistrationCreate, background_tasks: BackgroundTasks, user=Depends(get_user_info)):
 #     if "participant" not in user["roles"]:
 #         raise HTTPException(status_code=403, detail="Only participants can register")
+
+#     # NEW: Fetch the event details to use in the email
+#     event = await db.events.find_one({"_id": ObjectId(registration.event_id)})
+#     if not event:
+#         raise HTTPException(status_code=404, detail="Event not found")
 
 #     existing = await db.registrations.find_one({
 #         "user_id": user["id"],
@@ -184,54 +63,30 @@
 #     registration_dict = registration.dict()
 #     registration_dict.update({
 #         "user_id": user["id"],
+#         "email": user["email"],
 #         "created_at": datetime.utcnow()
 #     })
 
 #     result = await db.registrations.insert_one(registration_dict)
 #     saved = await db.registrations.find_one({"_id": result.inserted_id})
+    
+#     # --- NEW: SEND THE EMAIL ---
+#     # Add the email sending task to run in the background
+#     user_details = {"name": registration.name, "email": user["email"]}
+#     background_tasks.add_task(send_registration_email, user['email'], user_details, event)
+    
 #     return registration_helper(saved)
 
 
-# # -------------------
-# # Get my registrations with event details
-# # -------------------
-# # @router.get("/me", response_model=List[dict])
-# # async def my_registrations(user=Depends(get_user_info)):
-# #     if "participant" not in user["roles"]:
-# #         raise HTTPException(status_code=403, detail="Only participants can view their registrations")
-
-# #     pipeline = [
-# #         {"$match": {"user_id": user["id"]}},
-# #         {"$lookup": {
-# #             "from": "events",
-# #             "localField": "event_id",
-# #             "foreignField": "_id",
-# #             "as": "event"
-# #         }},
-# #         {"$unwind": "$event"},  # flatten event array
-# #         {"$project": {
-# #             "_id": 0,
-# #             "registration_id": {"$toString": "$_id"},
-# #             "event_id": {"$toString": "$event._id"},
-# #             "name": 1,
-# #             "email": 1,
-# #             "college": 1,
-# #             "phone": 1,
-# #             "created_at": 1,
-# #             "event": 1
-# #         }}
-# #     ]
-
-# #     results = await db.registrations.aggregate(pipeline).to_list(length=None)
-# #     return results
 # @router.get("/me", response_model=List[dict])
 # async def my_registrations(user=Depends(get_user_info)):
+#     # ... (this route remains the same)
 #     if "participant" not in user["roles"]:
 #         raise HTTPException(status_code=403, detail="Only participants can view their registrations")
 
 #     pipeline = [
-#         {"$match": {"email": user["email"]}},
-#         {"$addFields": {"eventObjId": {"$toObjectId": "$event_id"}}},  
+#         {"$match": {"user_id": user["id"]}}, # Matching by user_id is more robust
+#         {"$addFields": {"eventObjId": {"$toObjectId": "$event_id"}}},
 #         {"$lookup": {
 #             "from": "events",
 #             "localField": "eventObjId",
@@ -248,6 +103,7 @@
 #             "college": 1,
 #             "phone": 1,
 #             "created_at": 1,
+#             "event_details.id": {"$toString": "$event_details._id"},
 #             "event_details.title": 1,
 #             "event_details.date": 1,
 #             "event_details.venue": 1,
@@ -262,6 +118,9 @@
 #     return results
 
 
+
+
+# //working code 
 
 from fastapi import APIRouter, Depends, HTTPException
 from database import db
